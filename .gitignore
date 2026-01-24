@@ -1,2 +1,11 @@
 # docs
 /docs
+
+# Uploaded files
+/uploads
+
+# Database files
+*.db
+
+# Go binary
+face-calendar-server

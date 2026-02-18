@@ -1,7 +1,5 @@
 'use client';
 
-import Image from 'next/image';
-
 interface AvatarProps {
   src: string;
   alt: string;
@@ -11,7 +9,7 @@ interface AvatarProps {
 
 const sizeMap = {
   sm: 32,
-  md: 40,
+  md: 56,
   lg: 150,
 };
 
@@ -23,12 +21,13 @@ export function Avatar({ src, alt, size = 'md', className = '' }: AvatarProps) {
       className={`relative overflow-hidden rounded-full ${className}`}
       style={{ width: dimension, height: dimension }}
     >
-      <Image
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
         src={src}
         alt={alt}
-        fill
-        className="object-cover"
-        sizes={`${dimension}px`}
+        width={dimension}
+        height={dimension}
+        className="object-cover w-full h-full"
       />
     </div>
   );

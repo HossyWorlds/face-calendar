@@ -1,12 +1,15 @@
 package main
 
 import (
+	"context"
 	"face-calendar/database"
 	"face-calendar/handlers"
+	authMiddleware "face-calendar/middleware"
 	"log"
 	"net/http"
 	"os"
 
+	firebase "firebase.google.com/go/v4"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
@@ -14,11 +17,20 @@ import (
 
 func main() {
 	// Initialize database
-	dbPath := database.GetDBPath()
-	if err := database.InitDB(dbPath); err != nil {
+	if err := database.InitDB(); err != nil {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
 	defer database.CloseDB()
+
+	// Initialize Firebase (optional, will skip auth if not configured)
+	firebaseApp, err := initializeFirebase()
+	if err != nil {
+		log.Printf("Warning: Firebase not configured: %v", err)
+	} else if firebaseApp != nil {
+		if err := authMiddleware.InitFirebaseAuth(firebaseApp); err != nil {
+			log.Fatalf("Failed to initialize Firebase Auth: %v", err)
+		}
+	}
 
 	// Create router
 	r := chi.NewRouter()
@@ -28,9 +40,14 @@ func main() {
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.RequestID)
 
-	// CORS configuration
+	// CORS configuration - get origins from environment
+	allowedOrigins := []string{"http://localhost:3000"}
+	if prodOrigin := os.Getenv("CORS_ALLOWED_ORIGINS"); prodOrigin != "" {
+		allowedOrigins = append(allowedOrigins, prodOrigin)
+	}
+
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"http://localhost:3000"},
+		AllowedOrigins:   allowedOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
 		ExposedHeaders:   []string{"Link"},
@@ -41,8 +58,12 @@ func main() {
 	// Initialize handlers
 	entryHandler := handlers.NewEntryHandler()
 
-	// API routes
+	// API routes with auth middleware
 	r.Route("/api/v1", func(r chi.Router) {
+		// Apply auth middleware to all API routes if Firebase is initialized
+		if firebaseApp != nil {
+			r.Use(authMiddleware.AuthMiddleware)
+		}
 		r.Get("/encounters", entryHandler.GetEntries)
 		r.Post("/encounters", entryHandler.CreateEntry)
 		r.Put("/encounters/{id}", entryHandler.UpdateEntry)
@@ -67,4 +88,22 @@ func main() {
 	if err := http.ListenAndServe(":"+port, r); err != nil {
 		log.Fatalf("Server failed to start: %v", err)
 	}
+}
+
+// initializeFirebase は GOOGLE_APPLICATION_CREDENTIALS 環境変数を使って Firebase を初期化する。
+// SDK が自動的にクレデンシャルを検出するため、コード内でファイルパスを指定する必要はない。
+// Cloud Run 等の GCP 環境ではサービスアカウントが自動注入されるため、環境変数も不要。
+//
+// 参考: https://firebase.google.com/docs/admin/setup#initialize_the_sdk_in_non-google_environments
+func initializeFirebase() (*firebase.App, error) {
+	if os.Getenv("GOOGLE_APPLICATION_CREDENTIALS") == "" {
+		return nil, nil // クレデンシャル未設定 → 認証なしで動作
+	}
+
+	app, err := firebase.NewApp(context.Background(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return app, nil
 }

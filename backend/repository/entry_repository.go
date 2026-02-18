@@ -13,18 +13,15 @@ func NewEntryRepository() *EntryRepository {
 	return &EntryRepository{}
 }
 
-func (r *EntryRepository) GetByMonth(year, month int) ([]models.Entry, error) {
+func (r *EntryRepository) GetByMonth(year, month int, userID string) ([]models.Entry, error) {
 	query := `
-		SELECT id, date, photo_url, person_name, location, time_of_day, memo, created_at, updated_at
+		SELECT id, user_id, date::text, photo_url, person_name, location, time_of_day, memo, created_at, updated_at
 		FROM encounters
-		WHERE strftime('%Y', date) = ? AND strftime('%m', date) = ?
+		WHERE user_id = $1 AND EXTRACT(YEAR FROM date) = $2 AND EXTRACT(MONTH FROM date) = $3
 		ORDER BY date ASC
 	`
 
-	yearStr := time.Date(year, 1, 1, 0, 0, 0, 0, time.UTC).Format("2006")
-	monthStr := time.Date(2000, time.Month(month), 1, 0, 0, 0, 0, time.UTC).Format("01")
-
-	rows, err := database.DB.Query(query, yearStr, monthStr)
+	rows, err := database.DB.Query(query, userID, year, month)
 	if err != nil {
 		return nil, err
 	}
@@ -38,6 +35,7 @@ func (r *EntryRepository) GetByMonth(year, month int) ([]models.Entry, error) {
 
 		err := rows.Scan(
 			&entry.ID,
+			&entry.UserID,
 			&entry.Date,
 			&entry.PhotoURL,
 			&entry.PersonName,
@@ -70,19 +68,20 @@ func (r *EntryRepository) GetByMonth(year, month int) ([]models.Entry, error) {
 	return entries, nil
 }
 
-func (r *EntryRepository) GetByID(id string) (*models.Entry, error) {
+func (r *EntryRepository) GetByID(id, userID string) (*models.Entry, error) {
 	query := `
-		SELECT id, date, photo_url, person_name, location, time_of_day, memo, created_at, updated_at
+		SELECT id, user_id, date::text, photo_url, person_name, location, time_of_day, memo, created_at, updated_at
 		FROM encounters
-		WHERE id = ?
+		WHERE id = $1 AND user_id = $2
 	`
 
 	var entry models.Entry
 	var location, memo sql.NullString
 	var createdAt, updatedAt sql.NullTime
 
-	err := database.DB.QueryRow(query, id).Scan(
+	err := database.DB.QueryRow(query, id, userID).Scan(
 		&entry.ID,
+		&entry.UserID,
 		&entry.Date,
 		&entry.PhotoURL,
 		&entry.PersonName,
@@ -117,8 +116,8 @@ func (r *EntryRepository) GetByID(id string) (*models.Entry, error) {
 
 func (r *EntryRepository) Create(entry *models.Entry) error {
 	query := `
-		INSERT INTO encounters (id, date, photo_url, person_name, location, time_of_day, memo, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO encounters (id, user_id, date, photo_url, person_name, location, time_of_day, memo, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 	`
 
 	now := time.Now()
@@ -127,6 +126,7 @@ func (r *EntryRepository) Create(entry *models.Entry) error {
 
 	_, err := database.DB.Exec(query,
 		entry.ID,
+		entry.UserID,
 		entry.Date,
 		entry.PhotoURL,
 		entry.PersonName,
@@ -143,8 +143,8 @@ func (r *EntryRepository) Create(entry *models.Entry) error {
 func (r *EntryRepository) Update(entry *models.Entry) error {
 	query := `
 		UPDATE encounters
-		SET photo_url = ?, person_name = ?, location = ?, time_of_day = ?, memo = ?, updated_at = ?
-		WHERE id = ?
+		SET photo_url = $1, person_name = $2, location = $3, time_of_day = $4, memo = $5, updated_at = $6
+		WHERE id = $7 AND user_id = $8
 	`
 
 	entry.UpdatedAt = time.Now()
@@ -157,13 +157,14 @@ func (r *EntryRepository) Update(entry *models.Entry) error {
 		entry.Memo,
 		entry.UpdatedAt,
 		entry.ID,
+		entry.UserID,
 	)
 
 	return err
 }
 
-func (r *EntryRepository) Delete(id string) error {
-	query := `DELETE FROM encounters WHERE id = ?`
-	_, err := database.DB.Exec(query, id)
+func (r *EntryRepository) Delete(id, userID string) error {
+	query := `DELETE FROM encounters WHERE id = $1 AND user_id = $2`
+	_, err := database.DB.Exec(query, id, userID)
 	return err
 }

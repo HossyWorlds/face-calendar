@@ -9,3 +9,8 @@
 
 # Go binary
 face-calendar-server
+main
+
+# Firebase credentials (秘密鍵)
+firebase-credentials.json
+*-firebase-adminsdk-*.json

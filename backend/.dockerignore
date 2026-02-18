@@ -1,0 +1,8 @@
+*.db
+*.db-journal
+.git
+.gitignore
+README.md
+.env
+.env.local
+uploads/*

@@ -2,11 +2,13 @@ package handlers
 
 import (
 	"encoding/json"
+	"face-calendar/middleware"
 	"face-calendar/models"
 	"face-calendar/repository"
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -32,6 +34,12 @@ func NewEntryHandler() *EntryHandler {
 
 // GET /encounters?year=2025&month=1
 func (h *EntryHandler) GetEntries(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserIDFromContext(r)
+	if userID == "" {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
 	yearStr := r.URL.Query().Get("year")
 	monthStr := r.URL.Query().Get("month")
 
@@ -52,7 +60,7 @@ func (h *EntryHandler) GetEntries(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	entries, err := h.repo.GetByMonth(year, month)
+	entries, err := h.repo.GetByMonth(year, month, userID)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Failed to retrieve entries", err)
 		return
@@ -69,6 +77,12 @@ func (h *EntryHandler) GetEntries(w http.ResponseWriter, r *http.Request) {
 
 // POST /encounters
 func (h *EntryHandler) CreateEntry(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserIDFromContext(r)
+	if userID == "" {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
 	// Parse multipart form (max 10MB)
 	if err := r.ParseMultipartForm(10 << 20); err != nil {
 		http.Error(w, "failed to parse form", http.StatusBadRequest)
@@ -107,6 +121,7 @@ func (h *EntryHandler) CreateEntry(w http.ResponseWriter, r *http.Request) {
 
 	entry := &models.Entry{
 		ID:         uuid.New().String(),
+		UserID:     userID,
 		Date:       date,
 		PhotoURL:   photoURL,
 		PersonName: personName,
@@ -121,6 +136,10 @@ func (h *EntryHandler) CreateEntry(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.repo.Create(entry); err != nil {
+		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
+			http.Error(w, "Entry already exists for this date", http.StatusConflict)
+			return
+		}
 		respondError(w, http.StatusInternalServerError, "Failed to create entry", err)
 		return
 	}
@@ -132,13 +151,19 @@ func (h *EntryHandler) CreateEntry(w http.ResponseWriter, r *http.Request) {
 
 // PUT /encounters/:id
 func (h *EntryHandler) UpdateEntry(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserIDFromContext(r)
+	if userID == "" {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
 	id := chi.URLParam(r, "id")
 	if id == "" {
 		http.Error(w, "id is required", http.StatusBadRequest)
 		return
 	}
 
-	existing, err := h.repo.GetByID(id)
+	existing, err := h.repo.GetByID(id, userID)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Failed to retrieve entry", err)
 		return
@@ -193,13 +218,19 @@ func (h *EntryHandler) UpdateEntry(w http.ResponseWriter, r *http.Request) {
 
 // DELETE /encounters/:id
 func (h *EntryHandler) DeleteEntry(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserIDFromContext(r)
+	if userID == "" {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
 	id := chi.URLParam(r, "id")
 	if id == "" {
 		http.Error(w, "id is required", http.StatusBadRequest)
 		return
 	}
 
-	existing, err := h.repo.GetByID(id)
+	existing, err := h.repo.GetByID(id, userID)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Failed to retrieve entry", err)
 		return
@@ -209,7 +240,7 @@ func (h *EntryHandler) DeleteEntry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.repo.Delete(id); err != nil {
+	if err := h.repo.Delete(id, userID); err != nil {
 		respondError(w, http.StatusInternalServerError, "Failed to delete entry", err)
 		return
 	}

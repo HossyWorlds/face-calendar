@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { PhotoUploader } from './PhotoUploader';
+import { resolveBackendUrl } from '@/lib/api';
 
 interface EntryModalProps {
   isOpen: boolean;
@@ -58,7 +59,7 @@ export function EntryModal({
     if (entry) {
       setFormData({
         photo: null,
-        photo_url: entry.photo_url,
+        photo_url: resolveBackendUrl(entry.photo_url),
         name: entry.name,
         location: entry.location || '',
         time_of_day: entry.time_of_day,

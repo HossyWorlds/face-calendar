@@ -12,6 +12,7 @@ const (
 
 type Entry struct {
 	ID         string    `json:"id"`
+	UserID     string    `json:"user_id"`
 	Date       string    `json:"date"` // YYYY-MM-DD
 	PhotoURL   string    `json:"photo_url"`
 	PersonName string    `json:"person_name"`

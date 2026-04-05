@@ -14,3 +14,5 @@ main
 # Firebase credentials (秘密鍵)
 firebase-credentials.json
 *-firebase-adminsdk-*.json
+
+.claude/settings.local.json
